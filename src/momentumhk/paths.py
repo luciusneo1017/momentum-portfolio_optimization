@@ -20,6 +20,5 @@ LOGS      = ROOT / "logs"
 for d in (RAW, INTERIM, CLEANED, FIGURES, REPORTS, LOGS):
     d.mkdir(parents=True, exist_ok=True)
 
-def resolve_env(key: str, default: str = "") -> str:
-    """Read env var (e.g., API keys) safely."""
-    return os.getenv(key, default)
+#def resolve_env(key: str, default: str = "") -> str:
+#    return os.getenv(key, default)

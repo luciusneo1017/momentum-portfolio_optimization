@@ -9,7 +9,7 @@ from .signals import select_topN
 from .weights import make_weights_all
 
 
-# -------------------------- helpers --------------------------
+# -------------------------- helpers---------------------------------------------------------
 
 def _period_end_trading_dates(idx: pd.DatetimeIndex, freq: str) -> List[pd.Timestamp]:
     """
@@ -54,14 +54,14 @@ def perf_stats(returns: pd.Series, freq: int = 252) -> dict:
     MaxDD = dd.min()
     return dict(CAGR=CAGR, Vol=Vol, Sharpe=Sharpe, MaxDD=MaxDD)
 
-# -------------------------- core backtest --------------------------
+# -------------------------- backtest engine ---------------------------------------------------------
 
 def run_backtest(
     *,                               # parameters are keywords only
-    prices: pd.DataFrame,            # adj close (dates x tickers)
+    prices: pd.DataFrame,            # adj close (dates x tickers df)
     open_px: pd.DataFrame,           # open prices for execution
     rets_close: Optional[pd.DataFrame] = None,  # if None, computed from prices
-    adv_df: Optional[pd.DataFrame] = None,      # optional liquidity filter
+    adv_df: Optional[pd.DataFrame] = None,      # optional liquidity filter (ADV = Average Daily Volume)
     N: int = 40,
     signal: str = "12-1",            # "12-1" | "6-12" | "3-6-12"
     signal_weights: Optional[Tuple[float, ...]] = None,
@@ -69,7 +69,7 @@ def run_backtest(
     min_adv: Optional[float] = 1e6,
     buffer_rank: Optional[int] = 60,
     tc_bps: float = 5.0,             # turnover cost in bps per unit L1 turnover
-    rebalance_freq: str = "Q",       # 'M', 'Q', 'A', etc.
+    rebalance_freq: str = "Q",       # 'M', 'Q', 'A', etc. (monthly, quarterly, annually)
     schemes: Optional[List[str]] = None,  # subset of schemes to compute (keys of make_weights_all)
     # kwargs passed through to make_weights_all (windows, caps, shrinkage, etc.)
     vol_window: int = 126,
@@ -81,18 +81,17 @@ def run_backtest(
     shrink_alpha: float = 0.10,
 ) -> dict:
     """
-    Event-lite, vectorized backtest:
-      - Select Top-N at each period-end trading day (no look-ahead).
+    Vectorized backtest:
+      - Select Top-N securities at each period-end trading day.
       - Compute multiple weight schemes at the rebalance close.
-      - Apply weights from the *next open*, charge turnover costs, aggregate performance.
+      - Apply weights from the next open, charge turnover costs and aggregates performance.
 
-    Returns
-    -------
-    dict with:
-      - 'weights': dict[name -> DataFrame] weight time series (dates x tickers)
-      - 'turnover': dict[name -> Series] daily portfolio turnover
-      - 'pnl': dict[name -> Series] daily net returns (after TC)
-      - 'stats': dict[name -> metrics dict]
+
+    Returns dict with:
+      - 'weights': dict[name , pd.DataFrame] weight time series (dates x tickers)
+      - 'turnover': dict[name , pd.Series] daily portfolio turnover
+      - 'pnl': dict[name ,pd.Series] daily net returns (after TC)
+      - 'stats': dict[name, dict[str,float]]
       - 'rebalance_dates': List[pd.Timestamp]
     """
     # Align/validate inputs
@@ -109,13 +108,12 @@ def run_backtest(
     idx = prices.index
     rebals = month_end_rebalance_dates(idx, freq=rebalance_freq)
 
-    # Which schemes?
-    # make_weights_all returns keys:
+    # pass in a list of schemes or use default schemes
     default_names = ["equal", "inv_vol", "pca", "mvo", "mvo_shr_diag", "mvo_ls", "mvo_ls_shr_diag"]
     use_schemes = schemes or default_names
 
     # Storage
-    W = {k: pd.DataFrame(0.0, index=idx, columns=prices.columns, dtype=float) for k in use_schemes}
+    W = {k: pd.DataFrame(0.0, index=idx, columns=prices.columns, dtype=float) for k in use_schemes} # prices df columnss are tickers
     daily_turnover = {k: pd.Series(0.0, index=idx, dtype=float) for k in use_schemes}
 
     # Turnover buffer memory
@@ -136,18 +134,9 @@ def run_backtest(
             continue
 
         # 2) Compute weights per scheme (as-of dt close)
-        all_w = make_weights_all(
-            prices=prices,
-            rets=rets_close,
-            asof=dt,
-            top=top,
-            vol_window=vol_window,
-            pca_window=pca_window,
-            pca_penalty=pca_penalty,
-            cov_window=cov_window,
-            max_w=max_w,
-            gross_cap=gross_cap,
-            shrink_alpha=shrink_alpha,
+        all_w = make_weights_all(prices=prices, rets=rets_close, asof=dt, top=top,
+            vol_window=vol_window, pca_window=pca_window, pca_penalty=pca_penalty,
+            cov_window=cov_window, max_w=max_w, gross_cap=gross_cap, shrink_alpha=shrink_alpha
         )
 
         # 3) Store at dt
@@ -194,16 +183,3 @@ def run_backtest(
     }
 
 
-# -------------------------- (optional) CLI/demo --------------------------
-
-if __name__ == "__main__":
-    # Minimal smoke test (expects you to load your own data)
-    # Example:
-    #   prices = pd.read_parquet("cleaned_data/prices.parquet")      # adj close
-    #   open_px = pd.read_parquet("cleaned_data/open.parquet")        # open
-    #   adv_df  = pd.read_parquet("cleaned_data/adv.parquet")         # optional
-    #   results = run_backtest(prices=prices, open_px=open_px, adv_df=adv_df,
-    #                          N=40, signal="3-6-12", signal_weights=(0.2,0.3,0.5),
-    #                          rebalance_freq="Q", tc_bps=5.0)
-    #   print(pd.DataFrame(results["stats"]).T)
-    print("Run me from your notebook or pipeline. See __main__ for example usage.")

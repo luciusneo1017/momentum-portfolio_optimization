@@ -107,40 +107,37 @@ def select_topN(
     signal_weights: Optional[Tuple[float, ...]] = None,
 ) -> List[str]:
     """
-    Select Top-N tickers by a momentum-like cross-sectional score at `asof`,
-    with optional price/ADV filters and a 'keep' buffer to reduce turnover.
+    Select Top-N tickers by a cross-sectional momentum score at `asof` (as of date),
+    with optional price/ADV (Average Daily Volume) filters and a 'keep' buffer to reduce turnover.
 
-    Parameters
-    ----------
-    prices : DataFrame
+    Parameters:
+
+    prices : pd.DataFrame
         Adjusted close prices (index = trading dates, columns = tickers).
-    asof : Timestamp
+    asof : pd.Timestamp
         Rebalance date (trading day).
     N : int
-        Number of names to return.
+        Number of tickers
     min_price : float, optional
         Drop tickers whose *asof* price is below this.
-    adv : DataFrame, optional
-        Average daily (dollar) volume aligned to `prices.index`.
+    adv : pd.DataFrame, optional
+        Average daily volume df
     min_adv : float, optional
-        Drop tickers with ADV below this threshold (units must match `adv`).
+        For dropping tickers with ADV below this threshold 
     require_history_days : int
         Require at least this many trading days of history up to `asof`.
     keep_current : iterable[str], optional
-        Current holdings to consider keeping if still ranked within `buffer_rank`.
+        Current holdings to consider keeping constituent if still ranked within `buffer_rank`.
     buffer_rank : int, optional
         If given with `keep_current`, keep those names with rank <= buffer_rank
         before filling the rest up to N in rank order.
     signal : str
-        Which built-in signal to use: "12-1", "6-12", "3-6-12".
+        Which  signal to use: "12-1", "6-12", "3-6-12".
     signal_weights : tuple, optional
-        Weights for blended signals. Defaults: (0.4,0.6) for "6-12"; (0.2,0.3,0.5) for "3-6-12".
+        Weights for blended signals.
     
+    Returns a list[str] with selected tickers (length <= N).
 
-    Returns
-    -------
-    list[str]
-        Selected tickers (length <= N).
     """
     asof = pd.Timestamp(asof)
 
