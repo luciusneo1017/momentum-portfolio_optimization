@@ -13,7 +13,6 @@ from typing import Iterable, Optional, Tuple, List, Callable
 def quarter_end_dates(dates: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """
     Return the trading days that are quarter-ends based on `dates`.
-    Equivalent to resample('Q').last() on a calendar, but using trading days.
     """
     # Group by (year, quarter), take last date in each group
     q = pd.Series(dates, index=dates)
@@ -28,8 +27,7 @@ def quarterly_rebalance_dates(
     end: Optional[pd.Timestamp] = None,
 ) -> pd.DatetimeIndex:
     """
-    Compute quarterly rebalance dates (last trading day of each quarter),
-    optionally clipped to [start, end], and with an initial warmup period.
+    Compute quarterly rebalance dates (last trading day of each quarter).
     """
     idx = prices.index
     qend = quarter_end_dates(idx)
