@@ -106,9 +106,8 @@ def build_wide_and_save():
     # universe snapshot
     pd.DataFrame({"ticker": prices.columns}).to_csv(destination / "universe_current.csv", index=False)
 
-    print(f"Built wide panel from {src} and wrote cleaned CSVs to {dst}")
+    print(f"Built wide panel from {source} and wrote cleaned CSVs to {destination}")
 
-# ---- call both steps when run as a script ----
 if __name__ == "__main__":
     preprocess_data()
     build_wide_and_save()
