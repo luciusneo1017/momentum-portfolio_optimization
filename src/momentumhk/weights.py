@@ -4,13 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
-
-# Optional imports (guarded)
-try:
-    import cvxpy as cp
-except Exception:  # pragma: no cover
-    cp = None
-
+import cvxpy as cp
 from sklearn.decomposition import PCA
 from sklearn.covariance import LedoitWolf
 
@@ -96,7 +90,7 @@ def pca_tilt_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
 # --------- 4/5) Min-variance (long-only), with/without shrinkage ---------
 
 def mvo_long_only(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
-                         cov_window: int = 126, max_w: Optional[float] = 0.10,
+                         cov_window: int = 126, max_w: Optional[float] = None,
                          shrink: Optional[str] = None, shrink_alpha: float = 0.1) -> pd.Series:
     """
     Minimize w' Σ w  s.t. sum w = 1, 0 <= w <= max_w
@@ -127,8 +121,10 @@ def mvo_long_only(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
         cp.sum(w) == 1,
         w >= 0
     ]
+    
     if max_w is not None:
         constraints.append(w <= max_w)
+
     obj = cp.Minimize(cp.quad_form(w, Sigma))
     prob = cp.Problem(obj, constraints)
     prob.solve(solver=cp.SCS, verbose=False)
@@ -180,18 +176,17 @@ def mvo_long_short(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
 
     wv = np.array(w.value).ravel()
     # normalize to net=1 in case solver drifted
-    wv = wv / wv.sum() if wv.sum() != 0 else wv
+    wv = wv / wv.sum() if wv.sum() != 0 else wv #cannot div by 0
     return pd.Series(wv, index=top)
 
 
 # --------- orchestrator ---------
 
-def make_weights_all(
+def make_weights_all(*,                     # keyword only function, all inputs must be passed  by name
     prices: pd.DataFrame,
     rets: pd.DataFrame,
     asof: pd.Timestamp,
     top: List[str],
-    *,
     vol_window: int = 126,
     pca_window: int = 252,
     pca_penalty: float = 1.0,
@@ -214,11 +209,9 @@ def make_weights_all(
         "equal": equal_weight(top),
         "inv_vol": inverse_vol_weights(rets, asof, top, vol_window=vol_window),
         "pca": pca_tilt_weights(rets, asof, top, pca_window=pca_window, penalty=pca_penalty),
-        # Long-only MVO
         "mvo": mvo_long_only(rets, asof, top, cov_window=cov_window, max_w=max_w, shrink=None),
         "mvo_shr_diag": mvo_long_only(rets, asof, top, cov_window=cov_window, max_w=max_w,
                                              shrink="diag", shrink_alpha=shrink_alpha),
-        # Long–short MVO (net = 1), with optional gross cap
         "mvo_ls": mvo_long_short(rets, asof, top, cov_window=cov_window, shrink=None,
                                         gross_cap=gross_cap),
         "mvo_ls_shr_diag": mvo_long_short(rets, asof, top, cov_window=cov_window,
