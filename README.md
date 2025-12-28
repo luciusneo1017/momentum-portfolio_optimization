@@ -65,7 +65,7 @@ The data pipeline is split into three stages to keep each step auditable and eas
 
 - *data/raw* for raw input files from yfinance api
 - *data/interim* for cleaned per-ticker files (standardized columns, missing data handling + validation)
-*data/cleaned* for final wide-format datasets used directly by the backtest
+- *data/cleaned* for final wide-format datasets used directly by the backtest
 
 This staged structure provides more granular control over data cleaning and makes it easier to modify or troubleshoot individual steps, compared to transforming raw files directly into final backtest inputs with no intermediate outputs.
 
