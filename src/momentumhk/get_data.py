@@ -41,7 +41,7 @@ def main() -> None:
     tickers = load_constituents()
 
     HSIC_constituents_n = 503
-    assert len(tickers) == HSIC_constituents_n, (
+    assert len(tickers) == HSIC_constituents_n, (               # checksum to ensure all constituents are loaded in tickers and we do not miss out any
         f"Expected {HSIC_constituents_n} constituents, got {len(tickers)}"
     )
 

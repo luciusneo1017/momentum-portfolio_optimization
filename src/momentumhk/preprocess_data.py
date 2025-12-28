@@ -23,9 +23,9 @@ def preprocess_data():
     for file in os.listdir(RAW):
         df = pd.read_csv(RAW / file)
         
-        df.columns =['Date', 'Close', 'High', 'Low', 'Open', 'Volume'] #setting columns which occur in this order
+        df.columns =['Date', 'Close', 'High', 'Low', 'Open', 'Volume'] # setting columns which occur in this order
         df = df.iloc[2:].reset_index(drop=True)
-        #df = df[['Date','Close','Open','Volume']]
+        # df = df[['Date','Close','Open','Volume']]
 
     # forward fill missing price data, bfill() incase first row is nan
         df[['Close','High','Low','Open','Volume']] = df[['Close','High','Low','Open','Volume']].ffill().bfill()
@@ -57,34 +57,33 @@ def build_wide_and_save():
     destination = CLEANED
     destination.mkdir(parents=True, exist_ok=True)
 
-    parts = {}  # ticker -> per-ticker OHLCV with Date index
+    parts = {}  # per-ticker OHLCV with Date index
     for f in sorted(source.glob("*.csv")):
-        tkr = f.stem
+        ticker = f.stem
         df = pd.read_csv(f, parse_dates=["Date"])
         if df.empty:
             continue
 
-        # enforce expected columns/order from your cleaner
-        df = df[["Date", "Close", "High", "Low", "Open", "Volume"]]
+        # to validate that we only retrive the columns we need
+        # df = df[["Date", "Close", "High", "Low", "Open", "Volume"]]
+        # drop rows with id data is nan (if any), sort them and set them as the dataframe index
         df = df.dropna(subset=["Date"]).sort_values("Date").set_index("Date")
-
-        # de-duplicate dates if any
+        # remove duplicate index entries and keep the row with the last one, drops earlier entries
         df = df[~df.index.duplicated(keep="last")]
 
-        # keep only what we’ll actually use downstream
-        parts[tkr] = df[["Open", "Close", "Volume"]]
+        # the columns we need
+        parts[ticker] = df[["Open", "Close", "Volume"]]
 
     if not parts:
-        raise FileNotFoundError(f"No cleaned CSVs found in {src}")
+        raise FileNotFoundError(f"No cleaned CSVs found in {source}")
 
-    # concat side-by-side → (ticker, field), then flip to (field, ticker)
+    # concat side-by-side : (ticker, field), then flip to (field, ticker)
     wide = pd.concat(parts, axis=1).sort_index()
     wide = wide.swaplevel(axis=1).sort_index(axis=1)
     wide.columns = wide.columns.set_names(["field", "ticker"])
 
-    # Slice the shapes your backtest expects (single-level columns = tickers)
     prices  = wide["Close"]
-    open_px = wide["Open"].reindex_like(prices)
+    open_px = wide["Open"].reindex_like(prices)  # ensure we have the same index as prices as reference
     volume  = wide["Volume"].reindex_like(prices)
 
     # Derived tables
@@ -111,3 +110,4 @@ def build_wide_and_save():
 if __name__ == "__main__":
     preprocess_data()
     build_wide_and_save()
+# only execute when i run this file directly
