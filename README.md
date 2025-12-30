@@ -65,8 +65,26 @@ The data pipeline is split into three stages to keep each step auditable and eas
 
 - *data/raw* for raw input files from yfinance api
 - *data/interim* for cleaned per-ticker files (standardized columns, missing data handling + validation)
-- *data/cleaned* for final wide-format datasets used directly by the backtest
+- 
+
+
+*data/cleaned* for final wide-format datasets used directly by the backtest
 
 This staged structure provides more granular control over data cleaning and makes it easier to modify or troubleshoot individual steps, compared to transforming raw files directly into final backtest inputs with no intermediate outputs.
 
 ## Single generation (Momentum filter) - signals.py
+**quarter_end_dates()** *Helper function for *quarterly_rebalance_dates()* *
+Takes a pd.Series of dates (type: DatetimeIndex). groups them by quarter and takes the last date of each quarter.
+
+**quarterly_rebalance_dates()**
+Given a series of dates (for a vectorised backtest), returns the trading days that are at the end of each quarter. These dates are used as the rebalancing dates.
+
+**_month_shift_index** *Helper function for /momentum score functions*
+
+**momentum_12m_minus_1()**
+
+**select_topN()**
+
+**blened_rank_6_12()**
+
+**blended_rank_3_6_12()**

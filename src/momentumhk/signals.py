@@ -49,10 +49,10 @@ def quarterly_rebalance_dates(
 
 def _month_shift_index(idx: pd.DatetimeIndex, months: int) -> pd.DatetimeIndex:
     """
-    For each date t in idx, take the CALENDAR month-end that is `months` back,
-    then snap to the last available trading day <= that target month-end.
+    For each date t in idx, take the calendar month-end that is 'months' back,
+    then snap to the last available trading day that is <= that target month-end.
     """
-    # Month-end of t's month, then back `months` month-ends
+    # Month-end of current t's month, then go back to 'months' month-ends
     target_me = (idx + pd.offsets.MonthEnd(0)) - pd.offsets.MonthEnd(months)
     # For each target date, find last idx <= target (binary search)
     pos = np.searchsorted(idx.values, target_me.values, side="right") - 1
@@ -245,7 +245,7 @@ def blended_rank_3_6_12(
     except KeyError:
         t_pos = np.searchsorted(idx.values, asof.to_datetime64(), side="right") - 1
         if t_pos < 0:
-            raise ValueError("`asof` precedes first trading day.")
+            raise ValueError("'asof' precedes first trading day.")
     if t_pos < 252:
         raise ValueError("Not enough history for 12-1 momentum (~13 months).")
 
