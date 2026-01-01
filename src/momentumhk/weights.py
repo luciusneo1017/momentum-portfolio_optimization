@@ -12,7 +12,10 @@ from sklearn.covariance import LedoitWolf
 # --------- helpers ---------
 
 def _slice_until(df: pd.DataFrame, asof: pd.Timestamp, window: int | None) -> pd.DataFrame:
-    """Return df up to asof (inclusive), optionally taking the last `window` rows."""
+    """
+    Return df up to asof (inclusive), optionally taking the last 'window' rows
+
+    """
     df_ = df.loc[:pd.Timestamp(asof)]
     if window is not None:
         df_ = df_.tail(int(window))
@@ -21,8 +24,9 @@ def _slice_until(df: pd.DataFrame, asof: pd.Timestamp, window: int | None) -> pd
 
 def _simple_shrinkage_cov(X: pd.DataFrame, alpha: float = 0.1) -> pd.DataFrame:
     """
-    Shrink sample cov toward its diagonal: (1-α)Σ + α*diag(Σ).
-    X: returns (T×N), columns=tickers
+    Shrink sample cov toward its diagonal
+    X: returns (TxN), columns=tickers
+
     """
     Sig = X.cov()
     D = pd.DataFrame(np.diag(np.diag(Sig.values)), index=Sig.index, columns=Sig.columns)
@@ -30,7 +34,10 @@ def _simple_shrinkage_cov(X: pd.DataFrame, alpha: float = 0.1) -> pd.DataFrame:
 
 
 def _ledoit_wolf_cov(X: pd.DataFrame) -> pd.DataFrame:
-    """Ledoit–Wolf covariance (sklearn)."""
+    """
+    Ledoit-Wolf covariance 
+
+    """
     lw = LedoitWolf().fit(X.dropna())
     Sig = pd.DataFrame(lw.covariance_, index=X.columns, columns=X.columns)
     return Sig
@@ -43,12 +50,14 @@ def _normalize_long_only(w: pd.Series) -> pd.Series:
 
 
 def _normalize_net1(w: pd.Series) -> pd.Series:
-    """Normalize to sum(w)=1 (can be negative weights)."""
+    """
+    Normalise to sum(w)=1 (can be negative weights)
+    """
     s = w.sum()
     return w / s if s != 0 else w
 
 
-# --------- 1) Equal weight ---------
+# --------- 1) Equal weight -------------
 
 def equal_weight(top: List[str]) -> pd.Series:
     n = len(top)
@@ -58,7 +67,7 @@ def equal_weight(top: List[str]) -> pd.Series:
     return w
 
 
-# --------- 2) Inverse-vol ---------
+# --------- 2) Inverse-vol ------------------------
 
 def inverse_vol_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
                         vol_window: int = 126) -> pd.Series:
@@ -69,13 +78,14 @@ def inverse_vol_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
     return _normalize_long_only(w)
 
 
-# --------- 3) PCA tilt ---------
+# --------- 3) PCA tilt ------------------------
 
 def pca_tilt_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
                      pca_window: int = 252, penalty: float = 1.0) -> pd.Series:
     """
-    Down-weight stocks with large |PC1 loading|.
-    weight_i ∝ 1 / (1 + penalty * |loading_i|)
+    Down weight stocks with large a absolute PC1 loading
+    weight_i is proportional to  1 / (1 + penalty * |loading_i|)
+
     """
     X = _slice_until(rets[top], asof, pca_window).dropna(how="any")
     if X.shape[0] < 10:  # too little data
@@ -93,7 +103,8 @@ def mvo_long_only(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
                          cov_window: int = 126, max_w: Optional[float] = None,
                          shrink: Optional[str] = None, shrink_alpha: float = 0.1) -> pd.Series:
     """
-    Minimize w' Σ w  s.t. sum w = 1, 0 <= w <= max_w
+    Minimise w' Σ w  s.t. sum(w) = 1, 0 <= w <= max_w
+
     shrink: None | 'diag' (simple diagonal shrink) | 'lw' (Ledoit-Wolf)
     """
     if cp is None:
@@ -111,7 +122,7 @@ def mvo_long_only(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
     elif shrink == "lw":
         Sig = _ledoit_wolf_cov(X)
     else:
-        raise ValueError("Unknown shrink option.")
+        raise ValueError("Unknown shrink option")
 
     n = len(top)
     w = cp.Variable(n)
@@ -141,11 +152,11 @@ def mvo_long_short(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
                           cov_window: int = 126, shrink: Optional[str] = None,
                           shrink_alpha: float = 0.1, gross_cap: Optional[float] = None) -> pd.Series:
     """
-    Minimize w' Σ w  s.t. sum w = 1  (weights can be +/-)
-    Optional gross exposure cap: ||w||_1 <= G
+    Minimize w' Σ w  s.t. sum(w) = 1  (weights can be positive or negative)
+    Optional gross exposure cap: ||w||_1 <= G 
     """
     if cp is None:
-        raise ImportError("cvxpy is required for MVO weights.")
+        raise ImportError("cvxpy is required for MVO weights")
 
     X = _slice_until(rets[top], asof, cov_window).dropna(how="any")
     if X.shape[0] < len(top):
@@ -160,7 +171,7 @@ def mvo_long_short(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
         elif shrink == "lw":
             Sig = _ledoit_wolf_cov(X)
         else:
-            raise ValueError("Unknown shrink option.")
+            raise ValueError("Unknown shrink option")
 
     n = len(top)
     w = cp.Variable(n)

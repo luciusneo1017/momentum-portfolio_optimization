@@ -5,10 +5,8 @@ import pandas as pd
 import numpy as np
 from typing import Iterable, Optional, Tuple, List, Callable
 
-
-# ----------------------------- #
-# Rebalance date helpers
-# ----------------------------- #
+# Rebalance date helper functions
+# ----------------------------------------------------------
 
 def quarter_end_dates(dates: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """
@@ -22,7 +20,7 @@ def quarter_end_dates(dates: pd.DatetimeIndex) -> pd.DatetimeIndex:
 
 def quarterly_rebalance_dates(
     prices: pd.DataFrame,
-    warmup_days: int = 252 + 21,  # ~13 months warmup for 12-1 momentum
+    warmup_days: int = 252 + 3,  # need 12 months warmup for 12-1 momentum +3 for small buffer
     start: Optional[pd.Timestamp] = None,
     end: Optional[pd.Timestamp] = None,
 ) -> pd.DatetimeIndex:
@@ -42,21 +40,21 @@ def quarterly_rebalance_dates(
     qend = qend[qend >= first_valid]
     return qend
 
-
-# ----------------------------- #
 # Momentum (12-1) computation
-# ----------------------------- #
+# ---------------------------------------------------------
 
 def _month_shift_index(idx: pd.DatetimeIndex, months: int) -> pd.DatetimeIndex:
     """
     For each date t in idx, take the calendar month-end that is 'months' back,
     then snap to the last available trading day that is <= that target month-end.
+
+    idx is a pd.DatetimeIndex
     """
     # Month-end of current t's month, then go back to 'months' month-ends
     target_me = (idx + pd.offsets.MonthEnd(0)) - pd.offsets.MonthEnd(months)
     # For each target date, find last idx <= target (binary search)
     pos = np.searchsorted(idx.values, target_me.values, side="right") - 1
-    pos = np.clip(pos, 0, len(idx) - 1)
+    pos = np.clip(pos, 0, len(idx) - 1) # clamp index array so that no values fall below 0 incase of a -1 occurrence (e.g. -1 if target < first date)
     return pd.DatetimeIndex(idx.values[pos])
 
 
@@ -64,15 +62,15 @@ def momentum_12m_minus_1(prices: pd.DataFrame, asof: pd.Timestamp) -> pd.Series:
     idx = prices.index
     asof = pd.Timestamp(asof)
 
-    # locate/align asof to trading calendar
+    # align asof to trading calendar
     try:
         t_pos = idx.get_loc(asof)
     except KeyError:
         t_pos = np.searchsorted(idx.values, asof.to_datetime64(), side="right") - 1
         if t_pos < 0:
-            raise ValueError("`asof` is before the first available trading day.")
+            raise ValueError("'asof' is before the first available trading day.")
     if t_pos < 252:
-        raise ValueError("Not enough history for 12-1 momentum (~13 months).")
+        raise ValueError("Not enough history for 12-1 momentum (~11 months).")
 
     t_minus_1_idx  = _month_shift_index(idx, months=1)
     t_minus_12_idx = _month_shift_index(idx, months=12)
@@ -89,16 +87,15 @@ def momentum_12m_minus_1(prices: pd.DataFrame, asof: pd.Timestamp) -> pd.Series:
 
 # Selection (Top-N) with filters
 
-def select_topN(
+def select_topN(*,
     prices: pd.DataFrame,
     asof: pd.Timestamp,
     N: int = 40,
-    *,
     # Filters
     min_price: Optional[float] = None,
     adv: Optional[pd.DataFrame] = None,
     min_adv: Optional[float] = None,
-    require_history_days: int = 252 + 21,
+    require_history_days: int = 252, # need 12 months warmup for 12-1 momentum 
     # Turnover buffer
     keep_current: Optional[Iterable[str]] = None,
     buffer_rank: Optional[int] = None,
@@ -107,7 +104,7 @@ def select_topN(
     signal_weights: Optional[Tuple[float, ...]] = None,
 ) -> List[str]:
     """
-    Select Top-N tickers by a cross-sectional momentum score at `asof` (as of date),
+    Select Top-N tickers by a cross-sectional momentum score at 'asof' (as of date),
     with optional price/ADV (Average Daily Volume) filters and a 'keep' buffer to reduce turnover.
 
     Parameters:
@@ -125,14 +122,14 @@ def select_topN(
     min_adv : float, optional
         For dropping tickers with ADV below this threshold 
     require_history_days : int
-        Require at least this many trading days of history up to `asof`.
+        Require at least this many trading days of history up to 'asof'.
     keep_current : iterable[str], optional
-        Current holdings to consider keeping constituent if still ranked within `buffer_rank`.
+        Current holdings to consider keeping constituent if still ranked within 'buffer_rank'.
     buffer_rank : int, optional
-        If given with `keep_current`, keep those names with rank <= buffer_rank
+        If given with 'keep_current', keep those names with rank <= buffer_rank
         before filling the rest up to N in rank order.
     signal : str
-        Which  signal to use: "12-1", "6-12", "3-6-12".
+        Which  signal to use: '12-1', '6-12-1', '3-6-12-1'
     signal_weights : tuple, optional
         Weights for blended signals.
     
@@ -150,21 +147,18 @@ def select_topN(
     if len(candidates) == 0:
         return []
 
-    # 3) Compute cross-sectional score on candidates
-
-
+    # 3) Compute time series mometum score on candidates
     sig = signal.lower()
     if sig == "12-1":
         score = momentum_12m_minus_1(px[candidates], px.index[-1])
 
-    elif sig == "6-12":
+    elif sig == "6-12-1":
         w = signal_weights or (0.4, 0.6)
-        score = blended_rank_6_12(px[candidates], px.index[-1], weights=w)
+        score = blended_rank_6_12_minus_1(px[candidates], px.index[-1], weights=w)
 
-    elif sig == "3-6-12":
+    elif sig == "3-6-12-1":
         w = signal_weights or (0.2, 0.3, 0.5)
-        score = blended_rank_3_6_12(px[candidates], px.index[-1], weights=w)
-
+        score = blended_rank_3_6_12_minus_1(px[candidates], px.index[-1], weights=w)
 
     # 4) As-of price filter
     if min_price is not None:
@@ -181,7 +175,7 @@ def select_topN(
     if len(score) == 0:
         return []
 
-    # 6) Rank high→low (best rank=1) and sort
+    # 6) Rank high to low (best rank=1) and sort
     ranks = score.rank(ascending=False, method="first").sort_values()
 
     # 7) Keep-buffer to reduce turnover
@@ -199,7 +193,7 @@ def select_topN(
 
 
 
-def blended_rank_6_12(
+def blended_rank_6_12_minus_1(
     prices: pd.DataFrame,
     asof: pd.Timestamp,
     weights: tuple[float, float] = (0.4, 0.6)
@@ -212,9 +206,9 @@ def blended_rank_6_12(
     except KeyError:
         t_pos = np.searchsorted(idx.values, asof.to_datetime64(), side="right") - 1
         if t_pos < 0:
-            raise ValueError("`asof` precedes first trading day.")
+            raise ValueError("'asof' precedes first trading day")
     if t_pos < 252:
-        raise ValueError("Not enough history for 12-1 momentum (~13 months).")
+        raise ValueError("Not enough history for 12-1 momentum (~11 months)")
 
     t1  = _month_shift_index(idx, 1)[t_pos]
     t6  = _month_shift_index(idx, 6)[t_pos]
@@ -231,7 +225,7 @@ def blended_rank_6_12(
     )
 
 
-def blended_rank_3_6_12(
+def blended_rank_3_6_12_minus_1(
     prices: pd.DataFrame,
     asof: pd.Timestamp,
     weights: tuple[float, float, float] = (0.2, 0.3, 0.5)
@@ -247,7 +241,7 @@ def blended_rank_3_6_12(
         if t_pos < 0:
             raise ValueError("'asof' precedes first trading day.")
     if t_pos < 252:
-        raise ValueError("Not enough history for 12-1 momentum (~13 months).")
+        raise ValueError("Not enough history for 12-1 momentum (~11 months) ")
 
     t1  = _month_shift_index(idx, 1)[t_pos]
     t3  = _month_shift_index(idx, 3)[t_pos]

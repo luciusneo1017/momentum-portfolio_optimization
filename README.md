@@ -80,11 +80,29 @@ Takes a pd.Series of dates (type: DatetimeIndex). groups them by quarter and tak
 Given a series of dates (for a vectorised backtest), returns the trading days that are at the end of each quarter. These dates are used as the rebalancing dates.
 
 **_month_shift_index** *Helper function for /momentum score functions*
+For each date t in idx, we compute the calendar month-end of t’s month, then shift back by *months* month-ends to get a target month-end *target_me*. Since *target_me* may fall on a non-trading day, we snap it to the last available trading date in *idx* that is ≤ *target_me*. We do this using *np.searchsorted(idx.values, target_me.values, side="right") - 1*, where side="right" returns the insertion point after any equal value, and subtracting 1 gives the position of the last value ≤ the target. We then clamp the positions to the valid index range so we don’t get -1 when the target precedes the first available date (e.g.*target_me* < *idx[0]*). 
 
 **momentum_12m_minus_1()**
+Function to calculate a 12m - 1m momentum score in a vectorised format.
+*asof* denotes the date at which the momentum signal is computed which is a rebalance date. We align the asof date to the trading dates in our backtest. From the asof date, we derive *t1* and *t12* which are the trading dates 1-month and 12-months prior to the asof date. We find the current (closing) price at *t1* and *t12* respectively denoted by *p1* and *p12* and calculate a momentum score using *(p1/p12) -1* which is basically the stocks's simple simple return over the last 12 months, skipping the most recent month.
 
 **select_topN()**
+Function to select the Top N stocks based on the momentum score (Filtering based on time series Momentum). Firstly, check if we have required trading days for each stock (252 trading days needed as looking aback 1 year). Filter out the stocks without the required lookback data. Depending on signal type(12-1, 6-12-1, 12-6-3-1), calculate a time series momentum score/composite score if blended for all stocks in the universe.
 
-**blened_rank_6_12()**
+*Optional min price filter *min_price* *
+Grabs the latest price for the tickers scored and reorder them according to their score. Filters out those with a latest closing price less than a minimum price.
 
-**blended_rank_3_6_12()**
+*Optional average daily volume price filter *adv* *
+Grabs the latest average daily volume for the tickers scored and reorder them according to their score. Filters out those with an average daily volume lesser than a minimum benchmark.
+
+Finally ranks the stocks based on their momentum score using *rank(ascending=False, method='first')*. *ascending=False* ensures stocks are ranked from best (largest) score to the worst while *method = 'first'* ensures that in the rare event of a tie (two stocks have the same score), the ticker that appears first in the series is selected.
+
+I also included an optional keep-buffer to reduce turnover and make holdings more stable. The buffering logic is only applied when both *keep_current* and *buffer_rank* are provided. First, I filter *keep_current* to names that still exist in the *ranks* series as a safety check, since some tickers may have been filtered based on *min_price* and *min_adv* filters. Next, I keep only the current holdings whose rank is still within the buffer threshold (if *rank <= buffer_rank*). These kept names are then sorted by *rank* and placed at the front of the ordered list, with the remaining tickers appended in rank order. 
+
+Finally, the portfolio is formed by taking the first N (*default N = 40*) names from this combined ordering. I slice the list to return the top 40 (or min of top 40 or len of *ordered* if based on filters, there exists less than 40 stocks in our list). This acts as a catch to prevent any errors.
+
+**blended_rank_6_12_minus_1()**
+Function to calculate a momentum score blending 6 and 12-months moomentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 6-months and 12-months skipping the last months are calcuated as *r6* and *r12* respectively. A composite score is derived as a weightes sum of teh 6-month and 12-month returns.
+
+**blended_rank_3_6_12_minus_1()**
+Function to calculate a momentum score blending 3,6 and 12-months momentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 6-months and 12-months skipping the last months are calcuated as *r6* and *r12* respectively. A composite score is derived as a weighted sum of teh 6-month and 12-month returns.
