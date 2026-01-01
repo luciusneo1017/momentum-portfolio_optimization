@@ -102,7 +102,7 @@ I also included an optional keep-buffer to reduce turnover and make holdings mor
 Finally, the portfolio is formed by taking the first N (*default N = 40*) names from this combined ordering. I slice the list to return the top 40 (or min of top 40 or len of *ordered* if based on filters, there exists less than 40 stocks in our list). This acts as a catch to prevent any errors.
 
 **blended_rank_6_12_minus_1()**
-Function to calculate a momentum score blending 6 and 12-months moomentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 6-months and 12-months skipping the last months are calcuated as *r6* and *r12* respectively. A composite score is derived as a weightes sum of teh 6-month and 12-month returns.
+Function to calculate a momentum score blending 6 and 12-months momentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 6-months and 12-months, skipping the most recent month, are calcuated as *r6* and *r12* respectively. A composite score is derived as a weightes sum of teh 6-month and 12-month returns.
 
 **blended_rank_3_6_12_minus_1()**
-Function to calculate a momentum score blending 3,6 and 12-months momentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 6-months and 12-months skipping the last months are calcuated as *r6* and *r12* respectively. A composite score is derived as a weighted sum of teh 6-month and 12-month returns.
+Function to calculate a momentum score blending 3,6 and 12-months momentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 3-months, 6-months and 12-months skipping the most recent month, are calcuated as *r3*, *r6* and *r12* respectively. A composite score is derived as a weighted sum of the 3-month, 6-month and 12-month returns.
