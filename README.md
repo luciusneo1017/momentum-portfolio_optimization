@@ -106,3 +106,72 @@ Function to calculate a momentum score blending 6 and 12-months momentum in a ve
 
 **blended_rank_3_6_12_minus_1()**
 Function to calculate a momentum score blending 3,6 and 12-months momentum in a vectorised format. Similar to how *momentum_12m_minus_1()* works except now we use a composite score. Returns for 3-months, 6-months and 12-months skipping the most recent month, are calcuated as *r3*, *r6* and *r12* respectively. A composite score is derived as a weighted sum of the 3-month, 6-month and 12-month returns.
+
+## Weighting schemes (weights.py) ##
+This script contains code that is in charge of generating the optimal weights for each stock filtered out based on momentum according to six different weighting scheemes:
+- Equally weighted
+- Inverse volatility
+- Principle Component Analysis PCA
+- Constrained (Long-only) Mean Variance Optimisation (MVO)
+- Constrained MVO with Covariance matrix shrinkage
+- Unconstrained (Long-Short) MVO
+- Unconstrained (Long-Short) MVO with Covariance matrix shrinkage
+
+**_slice_until()**
+Slices the dataframe and returns all rows till the *asof* date, which is the date where rebalancing occurs.
+
+An optional toggle allows the user to set a prespecified window in which this dataframe should be sliced till.
+
+**_simple_shrinkage_cov**
+
+**_ledoit_wolf_cov**
+
+**_normalize_long_only**
+Returns a vector of weights for each stock. Clips negative weights so tthat negative weights become 0. Divide each weight by the sum of all weights as a normalization technique. (Sum of all weights = 1)
+
+**_normalize_net**
+Returns a vector of weights for each stock. This time we no not clip negative weights to zero as we allow weights to be negative (short position). Divide all weights by the sum of all weights for normalization. (sum of all weights = 1)
+
+**equal_weight**
+Returns a vector of weights where all weights are equal to each other. Each stock has weight 1/n where n is the number of stocks in the portfolio.
+
+**inverse_vol_weights**
+Returns a vector of weights where each weight is negatively proportional to the stock's volatility as measured by its historical standard deviatioin up till the rebalance date.
+
+First I slice for a dataframe of returns for the required stocks up till the rebalance date with a specified lookback period *vol_window*. (default = 126 ~ 6 months of daily lookback returns). I calculate a *sig* series by taking the standard deviation of the return series of each stock and replace any zeroes by np.nan so that 1.0/sig will not yield any division by zero errors. Each stock weight is inversely proportional to its historical stndard deviation as derived by 1/sig. Finally, I clean up the series by replacing np.inf or -np.inf (which usally occurs if sig had a np.nan so 1/sig would become np.inf) by np.nan and filling those entries with 0 weights.
+
+**pca_tilt_weights**
+Returns a long-only vector of weights that downweights stocks with large absolute PC1 loadings. Stocks that load more heavily on the first principal component receive smaller weights. 
+
+First I slice for a dataframe of returns for the required stocks up till the rebalance date with a specified lookback period *pca_window*. (default = 252 ~ 1 year of daily lookback returns). As a saefty catch, if fewer than half of the obervations required in the *pca_window* remain, I fall back to *equal weights*.
+
+Next, it fits a 1-component PCA model on X (shape TxN). The vector p.components_[0] contains the PC1 loading for each of the N stocks (PC1 direction). Taking absolute values gives each stock’s exposure magnitude to PC1. I then compute a per-stock scaling fcator *scale = 1/(1+penalty*load)*. A larger PC1 exposure implies a smaller scale (and thus a smaller portfolio weight). An optinal penalty parameter (default = 1)controls how aggressive the downweighting is. Finally, I normalizes these scales into portfolio weights that sum to 1 via *_normalize_long_only()*.
+
+*Explanation for scale formula*
+*scale = 1/(1+penalty * load)*
+- If loading = 0, then *scale = 1* -> no downweighting
+- As loading increases, scale decreases -> porfolio weight decreases after normalisation.
+Why not *scale = 1/load* ?
+- as load tends to 0, 1/load tends to infinity (scale increases hyperbolically), so weights can become over sensitive to tiny loadings
+- Because 1/load is unbounded as load → 0, small/noisy differences in loadings can cause disproportionately large differences in scale, leading to unstable and highly fluctuating portfolio weights.
+
+With *scale = 1/(1+penalty * load)*, scale is bounded *(0, 1]*, portfolio weights are more stable and do not fluctuate as much for a change in loadings.
+ 
+**mvo_long_only**
+Returns a vector of portfolio weights based on Mean Variance Optimisation.
+
+**mvo_long_short**
+
+**make_weights_all**
+
+
+
+
+
+
+
+
+
+
+
+

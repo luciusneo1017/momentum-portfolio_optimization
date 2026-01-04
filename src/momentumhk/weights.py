@@ -9,11 +9,12 @@ from sklearn.decomposition import PCA
 from sklearn.covariance import LedoitWolf
 
 
-# --------- helpers ---------
+# --------- helpers -----------------
 
 def _slice_until(df: pd.DataFrame, asof: pd.Timestamp, window: int | None) -> pd.DataFrame:
     """
-    Return df up to asof (inclusive), optionally taking the last 'window' rows
+    Returns df up to asof (inclusive)
+    Optionally, takes the last 'window' rows
 
     """
     df_ = df.loc[:pd.Timestamp(asof)]
@@ -44,14 +45,17 @@ def _ledoit_wolf_cov(X: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_long_only(w: pd.Series) -> pd.Series:
-    w = w.clip(lower=0.0).fillna(0.0)
+    """
+    Normalise to sum(w)=1 while only allowing positive weights
+    """
+    w = w.clip(lower=0.0).fillna(0.0)  # clip forces any negative weights to become 0.0
     s = w.sum()
-    return w / s if s > 0 else w
+    return w / s if s > 0 else w # if s == 0, w is a vector of zeroes, just return we to avoid division by 0
 
 
 def _normalize_net1(w: pd.Series) -> pd.Series:
     """
-    Normalise to sum(w)=1 (can be negative weights)
+    Normalise to sum(w)=1 while allowing negative weights
     """
     s = w.sum()
     return w / s if s != 0 else w
@@ -72,6 +76,8 @@ def equal_weight(top: List[str]) -> pd.Series:
 def inverse_vol_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
                         vol_window: int = 126) -> pd.Series:
     R = _slice_until(rets[top], asof, vol_window)
+    if R.shape[0] < 0.5 * vol_window:
+        return  equal_weight(top)
     sig = R.std().replace(0, np.nan)
     w = 1.0 / sig
     w = w.replace([np.inf, -np.inf], np.nan).fillna(0.0)
@@ -88,7 +94,7 @@ def pca_tilt_weights(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
 
     """
     X = _slice_until(rets[top], asof, pca_window).dropna(how="any")
-    if X.shape[0] < 10:  # too little data
+    if X.shape[0] < 0.5 * pca_window:  # too little data (fallback)
         return equal_weight(top)
 
     p = PCA(n_components=1).fit(X)
@@ -191,7 +197,7 @@ def mvo_long_short(rets: pd.DataFrame, asof: pd.Timestamp, top: List[str],
     return pd.Series(wv, index=top)
 
 
-# --------- orchestrator ---------
+# --------- orchestrator -------------
 
 def make_weights_all(*,                     # keyword only function, all inputs must be passed  by name
     prices: pd.DataFrame,
